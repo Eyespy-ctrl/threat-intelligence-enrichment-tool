@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Enrichment Results – TI Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        pre.details-box {
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 350px;
+            overflow: auto;
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 4px;
+        }
+        .severity-green  { background-color: #d4edda !important; color: #155724; font-weight: 600; }
+        .severity-yellow { background-color: #fff3cd !important; color: #856404; font-weight: 600; }
+        .severity-red    { background-color: #f8d7da !important; color: #721c24; font-weight: 600; }
+        .severity-error  { background-color: #e2e3e5 !important; color: #6c757d; }
+        .badge-severity {
+            min-width: 60px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <div class="container py-4">
+        <!-- Flashed messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ msg }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h2 class="card-title mb-1">Enrichment Results</h2>
+                        <p class="text-muted mb-0">Showing results for: <strong>{{ observable }}</strong></p>
+                    </div>
+                    <div class="btn-group">
+                        <a href="{{ url_for('download_csv', value=observable) }}" class="btn btn-outline-primary">Download CSV</a>
+                        <a href="{{ url_for('download_all_csv') }}" class="btn btn-outline-secondary">Download All</a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-dark">Back</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-0">
+                {% if results %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">Time</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col">Value</th>
+                                    <th scope="col">Provider</th>
+                                    <th scope="col">Country</th>
+                                    <th scope="col">Score</th>
+                                    <th scope="col">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in results %}
+                                    <tr>
+                                        <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else '-' }}</td>
+                                        <td>{{ row.type or 'ip' }}</td>
+                                        <td>{{ row.value or observable }}</td>
+
+                                        <!-- Provider with severity color -->
+                                        <td class="{% if row.error %}severity-error{% else %}{{ get_severity_class(row.provider, row.score) }}{% endif %}">
+                                            {{ row.provider or 'Unknown' }}
+                                        </td>
+
+                                        <td>{{ row.country or '-' }}</td>
+
+                                        <!-- Score with badge + severity color -->
+                                        <td class="{% if row.error %}severity-error{% else %}{{ get_severity_class(row.provider, row.score) }}{% endif %}">
+                                            {% if row.error %}
+                                                <span class="badge bg-secondary badge-severity">Error</span>
+                                            {% elif row.score == '-' or row.score == '' %}
+                                                <span class="badge bg-secondary badge-severity">-</span>
+                                            {% else %}
+                                                <span class="badge badge-severity bg-{{ 'success' if 'green' in get_severity_class(row.provider, row.score) else 'warning' if 'yellow' in get_severity_class(row.provider, row.score) else 'danger' }}">
+                                                    {{ row.score }}
+                                                </span>
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if row.details or row.error %}
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        data-bs-toggle="modal" 
+                                                        data-bs-target="#detailsModal{{ loop.index }}">
+                                                    View
+                                                </button>
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+
+                                    <!-- Modal for details -->
+                                    <div class="modal fade" id="detailsModal{{ loop.index }}" tabindex="-1" aria-labelledby="detailsModalLabel{{ loop.index }}" aria-hidden="true">
+                                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title" id="detailsModalLabel{{ loop.index }}">
+                                                        {{ row.provider or 'Provider' }} – {{ row.value or observable }}
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <dl class="row">
+                                                        <dt class="col-sm-3">Provider</dt>
+                                                        <dd class="col-sm-9">{{ row.provider or '-' }}</dd>
+
+                                                        <dt class="col-sm-3">Country</dt>
+                                                        <dd class="col-sm-9">{{ row.country or '-' }}</dd>
+
+                                                        <dt class="col-sm-3">Score</dt>
+                                                        <dd class="col-sm-9">{{ row.score or '-' }}</dd>
+
+                                                        <dt class="col-sm-3">Time</dt>
+                                                        <dd class="col-sm-9">{{ row.created_at.strftime('%Y-%m-%d %H:%M:%S') if row.created_at else '-' }}</dd>
+
+                                                        <dt class="col-sm-3">Details (raw)</dt>
+                                                        <dd class="col-sm-9">
+                                                            <pre class="details-box mb-0">{{ row.details or row.error or 'No details available' }}</pre>
+                                                        </dd>
+                                                    </dl>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-secondary text-center m-3">
+                        No results found for <strong>{{ observable }}</strong>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
